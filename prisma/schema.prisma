@@ -1,0 +1,139 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String            @id @default(cuid())
+  email         String            @unique
+  name          String?
+  password      String?
+  notionId      String?           @unique @map("notion_id")
+  createdAt     DateTime          @default(now())
+  workspaces    WorkspaceMember[]
+  pagesCreated  Page[]            @relation("PagesCreated")
+}
+
+model Workspace {
+  id        String            @id @default(cuid())
+  name      String
+  icon      String?
+  members   WorkspaceMember[]
+  pages     Page[]
+  createdAt DateTime          @default(now())
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String
+  role        String    @default("member") // owner, editor, viewer
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, userId])
+}
+
+model Page {
+  id             String               @id @default(cuid())
+  title          String               @default("Untitled")
+  icon           String?              // emoji or URL
+  cover          String?              // image URL
+  notionId       String?              @unique @map("notion_id")
+  isDatabase     Boolean              @default(false)
+  inTrash        Boolean              @default(false) @map("in_trash")
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  
+  // Tree structure - a page can be a child of another page
+  parentId       String?              @map("parent_id")
+  parent         Page?                @relation("PageChildren", fields: [parentId], references: [id])
+  children       Page[]               @relation("PageChildren")
+  
+  workspace      Workspace            @relation(fields: [workspaceId], references: [id])
+  workspaceId    String
+  
+  createdBy      User                 @relation("PagesCreated", fields: [createdById], references: [id])
+  createdById    String
+  
+  blocks         Block[]
+  database       NotionDatabase?
+  propertyValues PagePropertyValue[]
+}
+
+model Block {
+  id             String    @id @default(cuid())
+  type           String    // paragraph, heading_1, heading_2, heading_3, bulleted_list_item, etc.
+  content        Json      // rich text array, image URL, checked state etc.
+  position       Int       // order within parent
+  notionId       String?   @unique @map("notion_id")
+  inTrash        Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  
+  page           Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageId         String
+  
+  // Nested blocks
+  parentBlockId  String?   @map("parent_block_id")
+  parentBlock    Block?    @relation("BlockChildren", fields: [parentBlockId], references: [id])
+  children       Block[]   @relation("BlockChildren")
+}
+
+model NotionDatabase {
+  id          String       @id @default(cuid())
+  notionId    String?      @unique @map("notion_id")
+  isInline    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  
+  page        Page         @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageId      String       @unique
+  
+  dataSources DataSource[]
+}
+
+model DataSource {
+  id         String           @id @default(cuid())
+  name       String
+  notionId   String?          @unique @map("notion_id")
+  createdAt  DateTime         @default(now())
+  
+  database   NotionDatabase   @relation(fields: [databaseId], references: [id], onDelete: Cascade)
+  databaseId String
+  
+  properties PropertySchema[]
+}
+
+model PropertySchema {
+  id           String              @id @default(cuid())
+  name         String
+  type         String              // title, rich_text, number, select, multi_select, date, checkbox, url, etc.
+  config       Json?               // select options, formula expression, etc.
+  notionId     String?             @map("notion_id")
+  position     Int                 @default(0)
+  
+  dataSource   DataSource          @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  dataSourceId String
+  
+  values       PagePropertyValue[]
+}
+
+model PagePropertyValue {
+  id               String         @id @default(cuid())
+  value            Json           // actual value varies by property type
+  
+  page             Page           @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageId           String
+  
+  propertySchema   PropertySchema @relation(fields: [propertySchemaId], references: [id], onDelete: Cascade)
+  propertySchemaId String
+  
+  @@unique([pageId, propertySchemaId])
+}
