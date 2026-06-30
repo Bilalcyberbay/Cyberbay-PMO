@@ -14,6 +14,7 @@ model User {
   email         String            @unique
   name          String?
   password      String?
+  isSoftSignup  Boolean           @default(false) @map("is_soft_signup")
   notionId      String?           @unique @map("notion_id")
   createdAt     DateTime          @default(now())
   workspaces    WorkspaceMember[]
@@ -21,12 +22,13 @@ model User {
 }
 
 model Workspace {
-  id        String            @id @default(cuid())
-  name      String
-  icon      String?
-  members   WorkspaceMember[]
-  pages     Page[]
-  createdAt DateTime          @default(now())
+  id          String                @id @default(cuid())
+  name        String
+  icon        String?
+  members     WorkspaceMember[]
+  pages       Page[]
+  invitations WorkspaceInvitation[]
+  createdAt   DateTime              @default(now())
 }
 
 model WorkspaceMember {
@@ -136,4 +138,16 @@ model PagePropertyValue {
   propertySchemaId String
   
   @@unique([pageId, propertySchemaId])
+}
+
+model WorkspaceInvitation {
+  id             String    @id @default(cuid())
+  workspaceId    String    @map("workspace_id")
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedEmail   String    @map("invited_email")
+  token          String    @unique
+  status         String    @default("pending") // pending, accepted, expired
+  expiresAt      DateTime  @map("expires_at")
+  createdById    String    @map("created_by_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
 }

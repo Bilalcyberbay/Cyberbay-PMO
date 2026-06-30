@@ -33,3 +33,38 @@ export interface Block {
   pageId: string
   parentBlockId: string | null
 }
+
+export interface PropertySchema {
+  id: string
+  name: string
+  type: "title" | "text" | "select" | "date"
+  config: any // Options list for select type e.g. { options: string[] }
+  notionId: string | null
+  position: number
+  dataSourceId: string
+}
+
+export interface PagePropertyValue {
+  id: string
+  value: any // Renders cell content
+  pageId: string
+  propertySchemaId: string
+}
+
+export interface DataSource {
+  id: string
+  name: string
+  notionId: string | null
+  createdAt: string
+  databaseId: string
+  properties: PropertySchema[]
+}
+
+export interface NotionDatabase {
+  id: string
+  notionId: string | null
+  isInline: boolean
+  createdAt: string
+  pageId: string
+  dataSources: DataSource[]
+}

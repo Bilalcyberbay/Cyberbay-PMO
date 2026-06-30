@@ -2,6 +2,7 @@
 
 import React, { useState } from "react"
 import { useRouter, useParams } from "next/navigation"
+import { useSWRConfig } from "swr"
 import { FileText, Database, ChevronRight, ChevronDown, MoreHorizontal, Plus, Trash, Edit } from "lucide-react"
 import {
   DropdownMenu,
@@ -61,8 +62,35 @@ export default function SidebarItem({ node, depth, onMutate }: SidebarItemProps)
     }
   }
 
+  const { mutate } = useSWRConfig()
+
   const handleAddSubpage = async (e: React.MouseEvent) => {
     e.stopPropagation()
+    const tempId = `temp-${Math.random().toString()}`
+    const newOptimisticSubpage: PageNode = {
+      id: tempId,
+      title: "Untitled Subpage",
+      icon: null,
+      parentId: node.id,
+      isDatabase: false,
+      children: [],
+    }
+
+    const addChildToNode = (nodes: PageNode[]): PageNode[] => {
+      return nodes.map((n) => {
+        if (n.id === node.id) {
+          return { ...n, children: [...(n.children || []), newOptimisticSubpage] }
+        }
+        if (n.children && n.children.length > 0) {
+          return { ...n, children: addChildToNode(n.children) }
+        }
+        return n
+      })
+    }
+
+    mutate("/api/pages", (currentPages: any) => addChildToNode(currentPages || []), false)
+    setIsExpanded(true)
+
     try {
       const res = await fetch("/api/pages", {
         method: "POST",
@@ -76,18 +104,36 @@ export default function SidebarItem({ node, depth, onMutate }: SidebarItemProps)
 
       if (res.ok) {
         const newPage = await res.json()
-        onMutate()
-        setIsExpanded(true)
+        await mutate("/api/pages")
         router.push(`/${newPage.id}`)
+      } else {
+        mutate("/api/pages")
       }
     } catch (error) {
       console.error("Failed to add subpage:", error)
+      mutate("/api/pages")
     }
   }
 
   const handleRenamePage = async () => {
     if (!newTitle.trim()) return
     setIsUpdating(true)
+
+    const updateTitleInTree = (nodes: PageNode[]): PageNode[] => {
+      return nodes.map((n) => {
+        if (n.id === node.id) {
+          return { ...n, title: newTitle.trim() }
+        }
+        if (n.children && n.children.length > 0) {
+          return { ...n, children: updateTitleInTree(n.children) }
+        }
+        return n
+      })
+    }
+
+    mutate("/api/pages", (currentPages: any) => updateTitleInTree(currentPages || []), false)
+    setIsRenameOpen(false)
+
     try {
       const res = await fetch(`/api/pages/${node.id}`, {
         method: "PATCH",
@@ -96,11 +142,13 @@ export default function SidebarItem({ node, depth, onMutate }: SidebarItemProps)
       })
 
       if (res.ok) {
-        onMutate()
-        setIsRenameOpen(false)
+        mutate("/api/pages")
+      } else {
+        mutate("/api/pages")
       }
     } catch (error) {
       console.error("Failed to rename page:", error)
+      mutate("/api/pages")
     } finally {
       setIsUpdating(false)
     }
@@ -109,19 +157,36 @@ export default function SidebarItem({ node, depth, onMutate }: SidebarItemProps)
   const handleDeletePage = async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!confirm("Are you sure you want to move this page to trash?")) return
+
+    const removeNodeFromTree = (nodes: PageNode[]): PageNode[] => {
+      return nodes
+        .filter((n) => n.id !== node.id)
+        .map((n) => {
+          if (n.children && n.children.length > 0) {
+            return { ...n, children: removeNodeFromTree(n.children) }
+          }
+          return n
+        })
+    }
+
+    mutate("/api/pages", (currentPages: any) => removeNodeFromTree(currentPages || []), false)
+
     try {
       const res = await fetch(`/api/pages/${node.id}`, {
         method: "DELETE",
       })
 
       if (res.ok) {
-        onMutate()
+        mutate("/api/pages")
         if (isActive) {
           router.push("/")
         }
+      } else {
+        mutate("/api/pages")
       }
     } catch (error) {
       console.error("Failed to delete page:", error)
+      mutate("/api/pages")
     }
   }
 

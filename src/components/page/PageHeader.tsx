@@ -15,6 +15,7 @@ interface PageData {
 interface PageHeaderProps {
   page: PageData
   onMutate: () => void
+  isPeekCompact?: boolean
 }
 
 const POPULAR_EMOJIS = [
@@ -30,7 +31,7 @@ const RANDOM_COVERS = [
   "linear-gradient(to right, #ffe259, #ffa751)"
 ]
 
-export default function PageHeader({ page, onMutate }: PageHeaderProps) {
+export default function PageHeader({ page, onMutate, isPeekCompact = false }: PageHeaderProps) {
   const { setSaveStatus } = useEditorStore()
   const [title, setTitle] = useState(page.title)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -50,13 +51,56 @@ export default function PageHeader({ page, onMutate }: PageHeaderProps) {
     adjustTextareaHeight()
   }, [title])
 
-  const updatePageData = async (fields: Partial<PageData>) => {
+  const handleTitleBlur = async () => {
+    if (title.trim() === page.title) return
+
     setSaveStatus("saving")
     try {
       const res = await fetch(`/api/pages/${page.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fields),
+        body: JSON.stringify({ title: title.trim() }),
+      })
+
+      if (res.ok) {
+        setSaveStatus("saved")
+        onMutate()
+      } else {
+        setSaveStatus("error")
+      }
+    } catch (err) {
+      setSaveStatus("error")
+    }
+  }
+
+  const handleSelectEmoji = async (emoji: string) => {
+    setSaveStatus("saving")
+    try {
+      const res = await fetch(`/api/pages/${page.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ icon: emoji }),
+      })
+
+      if (res.ok) {
+        setSaveStatus("saved")
+        onMutate()
+      } else {
+        setSaveStatus("error")
+      }
+    } catch (err) {
+      setSaveStatus("error")
+    }
+  }
+
+  const handleAddCover = async () => {
+    const randomCover = RANDOM_COVERS[Math.floor(Math.random() * RANDOM_COVERS.length)]
+    setSaveStatus("saving")
+    try {
+      const res = await fetch(`/api/pages/${page.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cover: randomCover }),
       })
 
       if (res.ok) {
@@ -70,37 +114,54 @@ export default function PageHeader({ page, onMutate }: PageHeaderProps) {
     }
   }
 
-  const handleTitleBlur = () => {
-    if (title.trim() && title !== page.title) {
-      updatePageData({ title })
+  const handleRemoveCover = async () => {
+    setSaveStatus("saving")
+    try {
+      const res = await fetch(`/api/pages/${page.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cover: null }),
+      })
+
+      if (res.ok) {
+        setSaveStatus("saved")
+        onMutate()
+      } else {
+        setSaveStatus("error")
+      }
+    } catch (error) {
+      setSaveStatus("error")
     }
   }
 
-  const handleSelectEmoji = (emoji: string) => {
-    updatePageData({ icon: emoji })
-  }
+  const handleRemoveIcon = async () => {
+    setSaveStatus("saving")
+    try {
+      const res = await fetch(`/api/pages/${page.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ icon: null }),
+      })
 
-  const handleAddCover = () => {
-    const randomCover = RANDOM_COVERS[Math.floor(Math.random() * RANDOM_COVERS.length)]
-    updatePageData({ cover: randomCover })
-  }
-
-  const handleRemoveCover = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    updatePageData({ cover: null })
-  }
-
-  const handleRemoveIcon = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    updatePageData({ icon: null })
+      if (res.ok) {
+        setSaveStatus("saved")
+        onMutate()
+      } else {
+        setSaveStatus("error")
+      }
+    } catch (error) {
+      setSaveStatus("error")
+    }
   }
 
   return (
-    <div className="relative group/header w-full pb-6">
+    <div className="w-full relative group/header">
       
       {/* Cover Image */}
       <div
-        className="relative w-full h-44 overflow-hidden bg-zinc-800 transition duration-200"
+        className={`relative w-full overflow-hidden bg-zinc-800 transition duration-200 ${
+          isPeekCompact ? "h-28" : "h-44"
+        }`}
         style={{
           backgroundImage: page.cover ? page.cover : "none",
           backgroundColor: page.cover ? "transparent" : "#202020",
@@ -124,7 +185,7 @@ export default function PageHeader({ page, onMutate }: PageHeaderProps) {
           <div className="absolute top-3 right-4 opacity-0 group-hover/header:opacity-100 transition duration-200 flex space-x-2">
             <button
               onClick={handleAddCover}
-              className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-zinc-900/80 border border-zinc-700/60 hover:bg-zinc-800 text-[10px] font-semibold text-zinc-300 hover:text-white transition duration-150"
+              className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-zinc-900/80 border border-zinc-700/60 hover:bg-zinc-855 text-[10px] font-semibold text-zinc-300 hover:text-white transition duration-150"
             >
               Change cover
             </button>
@@ -139,12 +200,16 @@ export default function PageHeader({ page, onMutate }: PageHeaderProps) {
       </div>
 
       {/* Main Header Form Area */}
-      <div className="max-w-[720px] mx-auto px-14 -mt-12 relative z-10 flex flex-col space-y-4">
+      <div className={`mx-auto relative z-10 flex flex-col space-y-3 ${
+        isPeekCompact ? "max-w-none px-6 -mt-6" : "max-w-[720px] px-14 -mt-12"
+      }`}>
         
         {/* Page Icon (Emoji) */}
         <div className="flex items-end space-x-2">
           {page.icon ? (
-            <div className="relative group/icon h-20 w-20 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center text-4xl shadow-xl select-none">
+            <div className={`relative group/icon bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center shadow-xl select-none ${
+              isPeekCompact ? "h-14 w-14 text-2xl" : "h-20 w-20 text-4xl"
+            }`}>
               <span>{page.icon}</span>
               <Popover>
                 <PopoverTrigger className="absolute inset-0 rounded-2xl bg-black/40 opacity-0 group-hover/icon:opacity-100 flex items-center justify-center text-[10px] font-semibold text-zinc-300 transition duration-150 cursor-pointer">
@@ -213,7 +278,9 @@ export default function PageHeader({ page, onMutate }: PageHeaderProps) {
           }}
           placeholder="Untitled"
           rows={1}
-          className="w-full bg-transparent resize-none text-3xl font-bold text-white placeholder-zinc-700 border-none outline-none focus:ring-0 p-0 leading-tight select-all"
+          className={`w-full bg-transparent resize-none font-bold text-white placeholder-zinc-700 border-none outline-none focus:ring-0 p-0 leading-tight select-all ${
+            isPeekCompact ? "text-2xl" : "text-3xl"
+          }`}
         />
 
       </div>

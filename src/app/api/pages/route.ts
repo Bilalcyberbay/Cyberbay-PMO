@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getSessionUser } from "@/lib/auth"
+import { getSessionUser, getActiveWorkspaceMembership } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 
 interface PageNode {
@@ -24,16 +24,17 @@ function buildTree(pages: any[], parentId: string | null = null): PageNode[] {
     }))
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const user = await getSessionUser()
   if (!user) {
     return new NextResponse("Unauthorized", { status: 401 })
   }
 
   try {
-    const membership = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-    })
+    const { searchParams } = new URL(request.url)
+    const inTrashParam = searchParams.get("inTrash") === "true"
+
+    const membership = await getActiveWorkspaceMembership(user.id)
 
     if (!membership) {
       return NextResponse.json([])
@@ -42,12 +43,16 @@ export async function GET() {
     const pages = await prisma.page.findMany({
       where: {
         workspaceId: membership.workspaceId,
-        inTrash: false,
+        inTrash: inTrashParam,
       },
       orderBy: {
         createdAt: "asc",
       },
     })
+
+    if (inTrashParam) {
+      return NextResponse.json(pages)
+    }
 
     const pageTree = buildTree(pages, null)
     return NextResponse.json(pageTree)
@@ -66,9 +71,7 @@ export async function POST(request: NextRequest) {
   try {
     const { title, parentId, isDatabase } = await request.json()
 
-    const membership = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-    })
+    const membership = await getActiveWorkspaceMembership(user.id)
 
     if (!membership) {
       return new NextResponse("No active workspace found", { status: 404 })

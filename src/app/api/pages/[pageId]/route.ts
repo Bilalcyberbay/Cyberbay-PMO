@@ -74,13 +74,28 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { pageId } = await params
     
-    // Soft delete: move to trash
-    const updatedPage = await prisma.page.update({
+    const page = await prisma.page.findUnique({
       where: { id: pageId },
-      data: { inTrash: true },
     })
 
-    return NextResponse.json(updatedPage)
+    if (!page) {
+      return new NextResponse("Page not found", { status: 404 })
+    }
+
+    if (page.inTrash) {
+      // Hard delete: permanently purge from database
+      await prisma.page.delete({
+        where: { id: pageId },
+      })
+      return new NextResponse(null, { status: 204 })
+    } else {
+      // Soft delete: move to trash
+      const updatedPage = await prisma.page.update({
+        where: { id: pageId },
+        data: { inTrash: true },
+      })
+      return NextResponse.json(updatedPage)
+    }
   } catch (error: any) {
     console.error("DELETE /api/pages/[pageId] error:", error)
     return new NextResponse("Database Error", { status: 500 })
